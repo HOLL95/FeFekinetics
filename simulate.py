@@ -61,7 +61,7 @@ class FeFeSimulator:
     # Optimisation helpers
     # -----------------------------------------------------------------------
 
-    def set_param_names(self, param_names: list):
+    def set_param_names(self, param_names: list, fixed_params: dict={}):
         """
         Define the ordered list of parameters to optimise and any fixed
         parameters that will not be varied (e.g. initial conditions).
@@ -81,17 +81,22 @@ class FeFeSimulator:
             all parameters required by the chosen model.
         """
         self.param_names  = list(param_names)
-        self.three_species = "init_1" in self.param_names 
+        self.all_params=self.param_names+list(fixed_params.keys())
+        in_both=set(param_names).intersection(set(fixed_params.keys()))
+        if len(in_both)>0:
+            raise ValueError("The following parameters are defined twice {0}".format(in_both))
+        self.three_species = "init_1" in self.all_params 
         
         required_two   = {"k_inact", "k_react", "k_react_exp", "k_deg","current_conversion", "cap_scaling"}
         required_three = required_two | {"init_1","k_AB", "k_BA"}
         required = required_three if self.three_species else required_two
 
-        all_defined = set(self.param_names) 
+        all_defined = set(self.all_params) 
         missing = required - all_defined
         if missing:
             raise ValueError(f"Missing required parameter(s): {missing}")
         self.params_set=True
+        self.fixed_parameters=fixed_params
     def set_boundaries(self,boundaries):
         """
         Set lower and upper bounds for each optimisation parameter.
@@ -192,14 +197,14 @@ class FeFeSimulator:
             If required parameter keys are missing.
         """
         if self.params_set==False:
-            raise ValueError("Please set parameter names via `set_boundaries()`")
+            raise ValueError("Please set parameter names via `set_param_names()`")
         if self.boundaries_set==False:
-            raise ValueError("Please set parameter names via `set_param_names()`") 
+            raise ValueError("Please set parameter names via `set_boundaries()`")
         if any([x<0 for x in param_list]) or any([x>1 for x in param_list]):
             raise ValueError("simulate() only works with normalised parameters. Please try `dimensional_simulate()`")
         parameters=self.unnormalise(param_list)
         parameters=self.list_to_dict(parameters)
-        print(parameters)
+        parameters={**parameters, **self.fixed_parameters}
         t_span = (float(times[0]), float(times[-1]))
         kwargs = dict(t_eval=times, method="RK45", rtol=1e-8, atol=1e-10)
         
